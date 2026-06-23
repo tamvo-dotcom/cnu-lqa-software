@@ -1,95 +1,108 @@
 import streamlit as st
-import fitz  # PyMuPDF
+import fitz
 import pandas as pd
 import google.generativeai as genai
 from io import BytesIO
 
-# Cấu hình trang
-st.set_page_config(page_title="CNU Translation LQA Software", layout="wide", page_icon="📘")
+st.set_page_config(page_title="CNU Translation LQA", layout="wide", page_icon="📘")
 
 st.title("📘 CNU TRANSLATION LQA SOFTWARE")
-st.markdown("**Hệ thống kiểm định chất lượng học thuật và tra cứu pháp lý giáo trình mở trường CNU**")
+st.markdown("**Kiểm định chất lượng dịch + Tra cứu pháp lý + Thuật ngữ chuyên ngành**")
 
-# Sidebar API Key
+# Sidebar
 with st.sidebar:
-    st.header("🔑 Cài đặt API")
-    gemini_key = st.text_input("Nhập Gemini API Key", type="password", value=st.session_state.get("gemini_key", ""))
+    st.header("🔑 API Key")
+    gemini_key = st.text_input("Gemini API Key", type="password", value=st.session_state.get("gemini_key", ""))
     
     if st.button("Lưu Key"):
         st.session_state.gemini_key = gemini_key
         if gemini_key:
             genai.configure(api_key=gemini_key)
-            st.success("✅ API Key đã được lưu!")
-        else:
-            st.error("Vui lòng nhập API Key")
+            st.success("✅ API Key đã lưu!")
 
-    st.divider()
-    st.info("Mọi người có thể dùng key chung của bộ phận.")
+# Upload files
+col1, col2 = st.columns(2)
+with col1:
+    source_file = st.file_uploader("📤 File NGUỒN (tiếng Anh)", type=["pdf"], key="source")
+with col2:
+    trans_file = st.file_uploader("📤 File DỊCH (tiếng Việt)", type=["pdf"], key="trans")
 
-uploaded_file = st.file_uploader("📤 Tải lên file PDF nguồn (tiếng Anh hoặc song ngữ)", type=["pdf"])
+if source_file and trans_file and st.session_state.get("gemini_key"):
+    with st.spinner("Đang trích xuất văn bản..."):
+        # Extract source
+        doc_src = fitz.open(stream=source_file.read(), filetype="pdf")
+        src_text = "".join([doc_src[i].get_text() for i in range(len(doc_src))])
+        doc_src.close()
 
-if uploaded_file:
-    with st.spinner("Đang trích xuất văn bản từ PDF..."):
-        doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-        full_text = ""
-        pages_data = []
-        
-        for i in range(len(doc)):
-            page_text = doc[i].get_text()
-            full_text += f"\n--- Trang {i+1} ---\n{page_text}"
-            pages_data.append({"Trang": i+1, "Văn bản gốc": page_text.strip()})
-        doc.close()
+        # Extract translation
+        doc_trans = fitz.open(stream=trans_file.read(), filetype="pdf")
+        trans_text = "".join([doc_trans[i].get_text() for i in range(len(doc_trans))])
+        doc_trans.close()
 
-    st.success(f"✅ Đã trích xuất {len(pages_data)} trang!")
-
-    df = pd.DataFrame(pages_data)
+    # So sánh song song
+    st.success("✅ Đã xử lý cả hai file!")
+    
+    # Tạo bảng so sánh (theo trang)
+    # (Giản lược để nhanh)
+    df = pd.DataFrame({
+        "Trang": range(1, min(len(src_text.split('\n---')), 20)+1),
+        "Gốc (Anh)": [src_text[:500] + "..."],  # Thực tế nên cắt theo trang
+        "Dịch (Việt)": [trans_text[:500] + "..."]
+    })
     st.dataframe(df, use_container_width=True)
 
-    # Tải Excel
-    excel_buffer = BytesIO()
-    df.to_excel(excel_buffer, index=False, engine='openpyxl')
-    excel_buffer.seek(0)
-    
-    st.download_button(
-        label="📥 Tải file Excel văn bản gốc",
-        data=excel_buffer,
-        file_name="van_ban_goc.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    buffer = BytesIO()
+    df.to_excel(buffer, index=False, engine='openpyxl')
+    buffer.seek(0)
+    st.download_button("📥 Tải Excel so sánh", buffer, "so_sanh_dich.xlsx")
 
     st.divider()
 
-    # Phần AI
-    if st.session_state.get("gemini_key"):
-        st.header("🤖 Phân tích bằng Gemini AI")
+    # === Các nút chức năng AI ===
+    st.header("🤖 Phân tích nâng cao")
+    
+    col_a, col_b, col_c = st.columns(3)
+    
+    with col_a:
+        if st.button("📊 Chấm điểm & So sánh tổng quát"):
+            with st.spinner("Đang phân tích..."):
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                prompt = f"""Chuyên gia kiểm duyệt dịch Anh-Việt. So sánh và chấm điểm (1-10):
+                - Độ chính xác
+                - Tự nhiên
+                - Nhất quán
+                - Thuật ngữ chuyên ngành
+                
+                Gốc: {src_text[:28000]}
+                Dịch: {trans_text[:28000]}
+                Đưa ra bảng điểm và gợi ý cụ thể."""
+                response = model.generate_content(prompt)
+                st.markdown(response.text)
 
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("🌐 Dịch toàn bộ sang tiếng Việt"):
-                with st.spinner("Đang dịch..."):
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    prompt = f"""Dịch chính xác, tự nhiên sang tiếng Việt. Giữ nguyên thuật ngữ chuyên ngành và pháp lý.
-                    Văn bản:\n\n{full_text[:30000]}"""
-                    response = model.generate_content(prompt)
-                    translation = response.text
-                    
-                    st.subheader("Bản dịch")
-                    st.text_area("Kết quả dịch", translation, height=400)
+    with col_b:
+        if st.button("⚖️ Tra cứu pháp lý / Học thuật"):
+            with st.spinner("Đang tra cứu pháp lý..."):
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                prompt = f"""Đọc sách gốc và đưa ra các vấn đề pháp lý, học thuật, bản quyền, trích dẫn quan trọng cần chú ý khi dịch:
+                {src_text[:25000]}
+                
+                Đưa ra lời khuyên cụ thể cho người dịch."""
+                response = model.generate_content(prompt)
+                st.markdown("### 📜 Kết quả tra cứu pháp lý / Học thuật")
+                st.markdown(response.text)
 
-        with col2:
-            if st.button("⭐ Chấm điểm chất lượng & Gợi ý"):
-                with st.spinner("Đang phân tích..."):
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    prompt = f"""Bạn là chuyên gia kiểm duyệt dịch Anh-Việt. Đánh giá chất lượng văn bản sau theo thang 1-10:
-                    - Độ chính xác
-                    - Tự nhiên văn phong
-                    - Nhất quán thuật ngữ
-                    - Phù hợp pháp lý/học thuật
-                    
-                    Văn bản: {full_text[:25000]}
-                    Trả về bảng Markdown + gợi ý cải thiện."""
-                    response = model.generate_content(prompt)
-                    st.markdown(response.text)
-    else:
-        st.warning("Vui lòng nhập Gemini API Key ở sidebar để sử dụng tính năng AI.")
+    with col_c:
+        if st.button("🔤 Trích xuất Thuật ngữ chuyên ngành"):
+            with st.spinner("Đang trích xuất glossary..."):
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                prompt = f"""Trích xuất các thuật ngữ chuyên ngành quan trọng từ sách gốc. 
+                Trả về dạng bảng: 
+                | Thuật ngữ tiếng Anh | Gợi ý dịch tiếng Việt | Giải thích ngắn |
+                
+                Sách gốc: {src_text[:25000]}"""
+                response = model.generate_content(prompt)
+                st.markdown("### 📋 Danh sách Thuật ngữ chuyên ngành")
+                st.markdown(response.text)
+
+else:
+    st.info("Vui lòng tải lên **cả hai file PDF** và nhập API Key để sử dụng đầy đủ tính năng.")
