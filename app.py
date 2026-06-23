@@ -7,7 +7,7 @@ from io import BytesIO
 st.set_page_config(page_title="CNU Translation LQA", layout="wide", page_icon="📘")
 
 st.title("📘 CNU TRANSLATION LQA SOFTWARE")
-st.markdown("**Kiểm định chất lượng dịch thuật chuyên sâu**")
+st.markdown("**Tiền kiểm định chất lượng dịch thuật song ngữ**")
 
 with st.sidebar:
     st.header("🔑 API Key")
