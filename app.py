@@ -3,106 +3,76 @@ import fitz
 import pandas as pd
 import google.generativeai as genai
 from io import BytesIO
+import re
 
 st.set_page_config(page_title="CNU Translation LQA", layout="wide", page_icon="📘")
 
 st.title("📘 CNU TRANSLATION LQA SOFTWARE")
-st.markdown("**Kiểm định chất lượng dịch + Tra cứu pháp lý + Thuật ngữ chuyên ngành**")
+st.markdown("**Kiểm định chất lượng dịch thuật chuyên sâu - Format báo cáo chi tiết**")
 
-# Sidebar
 with st.sidebar:
     st.header("🔑 API Key")
     gemini_key = st.text_input("Gemini API Key", type="password", value=st.session_state.get("gemini_key", ""))
-    
     if st.button("Lưu Key"):
         st.session_state.gemini_key = gemini_key
         if gemini_key:
             genai.configure(api_key=gemini_key)
-            st.success("✅ API Key đã lưu!")
+            st.success("✅ Key đã lưu!")
 
-# Upload files
 col1, col2 = st.columns(2)
 with col1:
-    source_file = st.file_uploader("📤 File NGUỒN (tiếng Anh)", type=["pdf"], key="source")
+    source_file = st.file_uploader("📤 File NGUỒN (Anh)", type=["pdf"], key="source")
 with col2:
-    trans_file = st.file_uploader("📤 File DỊCH (tiếng Việt)", type=["pdf"], key="trans")
+    trans_file = st.file_uploader("📤 File DỊCH (Việt)", type=["pdf"], key="trans")
 
 if source_file and trans_file and st.session_state.get("gemini_key"):
     with st.spinner("Đang trích xuất văn bản..."):
-        # Extract source
         doc_src = fitz.open(stream=source_file.read(), filetype="pdf")
         src_text = "".join([doc_src[i].get_text() for i in range(len(doc_src))])
         doc_src.close()
 
-        # Extract translation
         doc_trans = fitz.open(stream=trans_file.read(), filetype="pdf")
         trans_text = "".join([doc_trans[i].get_text() for i in range(len(doc_trans))])
         doc_trans.close()
 
-    # So sánh song song
     st.success("✅ Đã xử lý cả hai file!")
-    
-    # Tạo bảng so sánh (theo trang)
-    # (Giản lược để nhanh)
-    df = pd.DataFrame({
-        "Trang": range(1, min(len(src_text.split('\n---')), 20)+1),
-        "Gốc (Anh)": [src_text[:500] + "..."],  # Thực tế nên cắt theo trang
-        "Dịch (Việt)": [trans_text[:500] + "..."]
-    })
-    st.dataframe(df, use_container_width=True)
 
-    buffer = BytesIO()
-    df.to_excel(buffer, index=False, engine='openpyxl')
-    buffer.seek(0)
-    st.download_button("📥 Tải Excel so sánh", buffer, "so_sanh_dich.xlsx")
+    if st.button("🚀 Tạo Báo cáo Kiểm định Chi Tiết (giống Excel của bạn)"):
+        with st.spinner("Gemini đang phân tích sâu từng đoạn..."):
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            prompt = f"""Bạn là chuyên gia kiểm duyệt dịch Anh-Việt chuyên nghiệp. 
+Phân tích so sánh từng đoạn giữa bản gốc và bản dịch. Trả về **dạng bảng** với các cột sau:
 
-    st.divider()
+STT | Nguyên tác (Tiếng Anh) | Bản dịch (Tiếng Việt) | Kết quả kiểm định
 
-    # === Các nút chức năng AI ===
-    st.header("🤖 Phân tích nâng cao")
-    
-    col_a, col_b, col_c = st.columns(3)
-    
-    with col_a:
-        if st.button("📊 Chấm điểm & So sánh tổng quát"):
-            with st.spinner("Đang phân tích..."):
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                prompt = f"""Chuyên gia kiểm duyệt dịch Anh-Việt. So sánh và chấm điểm (1-10):
-                - Độ chính xác
-                - Tự nhiên
-                - Nhất quán
-                - Thuật ngữ chuyên ngành
-                
-                Gốc: {src_text[:28000]}
-                Dịch: {trans_text[:28000]}
-                Đưa ra bảng điểm và gợi ý cụ thể."""
-                response = model.generate_content(prompt)
-                st.markdown(response.text)
+Yêu cầu:
+- Phân tích chi tiết, nghiêm ngặt
+- Chỉ ra rõ: sót ý, dịch máy móc, sai thuật ngữ, câu dịch quá ngắn/dài, không tự nhiên, sai ngữ pháp, sai ngữ cảnh học thuật/pháp lý
+- Dùng các nhận xét cụ thể như: "Đạt yêu cầu", "👉 Nghi ngờ sót ý (Câu dịch quá ngắn)", "👉 Sai thuật ngữ", "👉 Dịch tự nhiên tốt", v.v.
+- Phân tích ít nhất 20-30 đoạn quan trọng nhất
 
-    with col_b:
-        if st.button("⚖️ Tra cứu pháp lý / Học thuật"):
-            with st.spinner("Đang tra cứu pháp lý..."):
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                prompt = f"""Đọc sách gốc và đưa ra các vấn đề pháp lý, học thuật, bản quyền, trích dẫn quan trọng cần chú ý khi dịch:
-                {src_text[:25000]}
-                
-                Đưa ra lời khuyên cụ thể cho người dịch."""
-                response = model.generate_content(prompt)
-                st.markdown("### 📜 Kết quả tra cứu pháp lý / Học thuật")
-                st.markdown(response.text)
+Bản gốc:
+{src_text[:35000]}
 
-    with col_c:
-        if st.button("🔤 Trích xuất Thuật ngữ chuyên ngành"):
-            with st.spinner("Đang trích xuất glossary..."):
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                prompt = f"""Trích xuất các thuật ngữ chuyên ngành quan trọng từ sách gốc. 
-                Trả về dạng bảng: 
-                | Thuật ngữ tiếng Anh | Gợi ý dịch tiếng Việt | Giải thích ngắn |
-                
-                Sách gốc: {src_text[:25000]}"""
-                response = model.generate_content(prompt)
-                st.markdown("### 📋 Danh sách Thuật ngữ chuyên ngành")
-                st.markdown(response.text)
+Bản dịch:
+{trans_text[:35000]}"""
+
+            response = model.generate_content(prompt)
+            
+            st.subheader("📊 Báo cáo Kiểm định Chất lượng")
+            st.markdown(response.text)
+
+            # Tạo Excel giống báo cáo của bạn
+            # (Chúng ta có thể parse bảng Markdown thành DataFrame nếu cần, nhưng tạm export text trước)
+            excel_buffer = BytesIO()
+            # Có thể cải tiến sau để tự động tạo Excel đầy đủ
+            df_simple = pd.DataFrame({"Báo cáo": [response.text]})
+            df_simple.to_excel(excel_buffer, index=False)
+            excel_buffer.seek(0)
+            
+            st.download_button("📥 Tải báo cáo Excel", excel_buffer, "Bao_cao_kiem_dinh.xlsx", 
+                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 else:
-    st.info("Vui lòng tải lên **cả hai file PDF** và nhập API Key để sử dụng đầy đủ tính năng.")
+    st.info("Vui lòng tải lên cả hai file PDF và nhập API Key.")
