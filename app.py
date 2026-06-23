@@ -39,7 +39,7 @@ if source_file and trans_file and st.session_state.get("gemini_key"):
     if st.button("🚀 Tạo Báo cáo Kiểm định Chi Tiết"):
         with st.spinner("Gemini đang phân tích sâu (có thể mất 20-40 giây)..."):
             try:
-                model = genai.GenerativeModel('gemini-2.0-flash-lite')   # ← Model phù hợp với bạn
+                model = genai.GenerativeModel('gemini-pro')   # ← Model phù hợp với bạn
                 
                 prompt = f"""Bạn là chuyên gia kiểm duyệt dịch Anh-Việt. Phân tích so sánh chi tiết giữa bản gốc và bản dịch. 
 Trả về dưới dạng **bảng** với các cột:
