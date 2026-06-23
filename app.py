@@ -25,7 +25,7 @@ with col2:
     trans_file = st.file_uploader("📤 File DỊCH (Việt)", type=["pdf"], key="trans")
 
 if source_file and trans_file and st.session_state.get("gemini_key"):
-    with st.spinner("Đang trích xuất..."):
+    with st.spinner("Đang trích xuất văn bản..."):
         doc_src = fitz.open(stream=source_file.read(), filetype="pdf")
         src_text = "".join([doc_src[i].get_text() for i in range(len(doc_src))])
         doc_src.close()
@@ -39,22 +39,28 @@ if source_file and trans_file and st.session_state.get("gemini_key"):
     if st.button("🚀 Tạo Báo cáo Kiểm định Chi Tiết"):
         with st.spinner("Gemini đang phân tích sâu..."):
             try:
-                model = genai.GenerativeModel('gemini-1.5-flash-latest')   # ← Đã sửa model
+                # Model đã sửa
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 
-                prompt = f"""Bạn là chuyên gia kiểm duyệt dịch Anh-Việt. Phân tích so sánh chi tiết và trả về bảng có cột:
+                prompt = f"""Bạn là chuyên gia kiểm duyệt dịch Anh-Việt. Phân tích so sánh chi tiết và trả về **bảng** với cấu trúc:
+
 STT | Nguyên tác (Tiếng Anh) | Bản dịch (Tiếng Việt) | Kết quả kiểm định
 
-Yêu cầu nhận xét cụ thể, nghiêm ngặt: Đạt yêu cầu / 👉 Nghi ngờ sót ý / Sai thuật ngữ / Câu dịch quá ngắn / Không tự nhiên...
+Yêu cầu:
+- Nhận xét cụ thể, chuyên nghiệp
+- Dùng các cụm: "Đạt yêu cầu", "👉 Nghi ngờ sót ý (Câu dịch quá ngắn)", "👉 Sai thuật ngữ", "👉 Dịch máy móc", "👉 Tốt, tự nhiên"...
 
-Bản gốc: {src_text[:30000]}
-Bản dịch: {trans_text[:30000]}"""
+Bản gốc: {src_text[:32000]}
+
+Bản dịch: {trans_text[:32000]}"""
 
                 response = model.generate_content(prompt)
+                st.subheader("📊 Báo cáo Kiểm định")
                 st.markdown(response.text)
 
             except Exception as e:
-                st.error(f"Lỗi: {str(e)}")
-                st.info("Thử lại hoặc kiểm tra API Key.")
+                st.error(f"Lỗi API: {str(e)}")
+                st.info("Nếu vẫn lỗi, thử model 'gemini-pro' thay vì 'gemini-1.5-flash'")
 
 else:
-    st.info("Vui lòng tải 2 file và nhập API Key.")
+    st.info("Vui lòng tải lên cả hai file PDF và nhập API Key.")
