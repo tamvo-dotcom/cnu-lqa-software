@@ -3,7 +3,48 @@ import fitz
 import pandas as pd
 import google.generativeai as genai
 from io import BytesIO
+pip install vietquill
+from vietquill import AutoModelForControllableParaphraseGeneration, ParaphraseStyle
+from vietquill import AutoModelForParaphraseQualityEstimation
 
+class PreTranslationVerifier:
+    def __init__(self):
+        # ... code cũ ...
+        self.paraphraser = None
+        self.quality_estimator = None
+    
+    def load_vietquill(self):
+        """Load model VietQuill (chạy lần đầu sẽ tải model)"""
+        if self.paraphraser is None:
+            self.paraphraser = AutoModelForControllableParaphraseGeneration()
+        if self.quality_estimator is None:
+            self.quality_estimator = AutoModelForParaphraseQualityEstimation()
+    
+    def improve_vietnamese_translation(self, viet_text: str, style="BALANCED", num_candidates=3):
+        """Cải thiện bản dịch tiếng Việt"""
+        self.load_vietquill()
+        
+        # Tạo các phiên bản paraphrase
+        candidates = self.paraphraser.paraphrase(
+            viet_text, 
+            style=ParaphraseStyle[style] if isinstance(style, str) else style,
+            num_candidates=num_candidates
+        )
+        
+        # Đánh giá chất lượng
+        evaluations = []
+        for cand in candidates:
+            score = self.quality_estimator.estimate(viet_text, cand)  # so sánh với bản gốc hoặc bản dịch máy
+            evaluations.append({
+                "paraphrase": cand,
+                "scores": score
+            })
+        
+        return {
+            "original": viet_text,
+            "improved_candidates": candidates,
+            "evaluations": evaluations
+        }
 st.set_page_config(page_title="CNU Translation LQA", layout="wide", page_icon="📘")
 
 st.title("📘 CNU TRANSLATION LQA SOFTWARE")
